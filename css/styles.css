@@ -325,6 +325,10 @@ button:focus-visible, input:focus-visible {
   border-color: transparent;
 }
 
+.choice.is-on .meta {
+  color: #000;
+}
+
 .pad, .aux {
   display: grid;
   gap: 8px;
