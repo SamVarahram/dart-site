@@ -1,0 +1,19 @@
+{
+  "name": "Tavlan",
+  "short_name": "Tavlan",
+  "description": "Räkna dartmatcher i telefonen.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101612",
+  "theme_color": "#101612",
+  "lang": "sv",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
