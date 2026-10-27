@@ -17,7 +17,7 @@ import {
   shouldOfferWriteIn,
   startNextLeg,
   suggestCheckout,
-} from "./game.js";
+} from "./game.js?v=3";
 
 const KEY = "tavlan.v1";
 
@@ -54,6 +54,7 @@ function freshSetup() {
     score: 501,
     custom: "",
     checkout: "double",
+    loa: false,
     legs: 1,
     legStart: "alternate",
   };
@@ -206,6 +207,10 @@ function render() {
   const keepScroll = scroller?.scrollLeft ?? 0;
   const current = match && ui.screen === "board" ? currentPlayerIndex(match) : -1;
   app.innerHTML = ui.screen === "board" && match ? renderBoard() : ui.screen === "setup" ? renderSetup() : renderHome();
+  if (ui.screen !== "board" || !match) {
+    if (ui.confirm) app.insertAdjacentHTML("beforeend", renderConfirm());
+    if (ui.toast) app.insertAdjacentHTML("beforeend", `<div class="toast" role="status">${esc(ui.toast)}</div>`);
+  }
   const nextScroller = document.querySelector(".columns");
   if (nextScroller && current === shownPlayer) nextScroller.scrollLeft = keepScroll;
   if (nextScroller && current !== shownPlayer) {
@@ -327,6 +332,9 @@ function renderSetup() {
             <button type="button" class="choice${setup.checkout === item.id ? " is-on" : ""}" data-action="checkout" data-value="${item.id}">
               <strong>${item.label}</strong><br><span class="meta">${item.hint}</span>
             </button>`).join("")}
+          <button type="button" class="choice${setup.loa ? " is-on" : ""}" data-action="loa" aria-pressed="${setup.loa ? "true" : "false"}">
+            <strong>LoA</strong><br><span class="meta">En stjärna när rundan har en utgång, även om den dyker upp mitt i. Två stjärnor ger enkel utgång nästa runda. Stjärnan sitter kvar vid tjock.</span>
+          </button>
         </div>
       </div>
       <div class="block">
@@ -369,6 +377,13 @@ function renderBoard() {
     </main>`;
 }
 
+function loaNote(playerIndex, current) {
+  if (!match.loa || playerIndex !== current || match.phase !== "play") return "";
+  if (match.visitAllowSingle) return `<p class="loa-flag">Enkel ut den här rundan</p>`;
+  if (match.visitStar) return `<p class="loa-flag">Stjärna säkrad</p>`;
+  return "";
+}
+
 function renderColumn(player, playerIndex, current) {
   const stats = playerStats(match, playerIndex);
   const visits = match.log.filter((entry) => entry.leg === match.legNumber && entry.player === playerIndex);
@@ -381,6 +396,8 @@ function renderColumn(player, playerIndex, current) {
         ${playerIndex === current && match.phase === "play" ? `<span class="tur">Tur</span>` : `<span class="meta">${player.legs}</span>`}
       </div>
       <div class="col-score">${match.scores[playerIndex]}</div>
+      ${match.loa ? `<p class="stars" aria-label="${player.stars || 0} av 2 stjärnor"><span class="${(player.stars || 0) >= 1 ? "is-on" : ""}">★</span><span class="${(player.stars || 0) >= 2 ? "is-on" : ""}">★</span></p>` : ""}
+      ${loaNote(playerIndex, current)}
       <p class="avg">Snitt ${formatAverage(stats.average)} · ${player.legs} ${player.legs === 1 ? "leg" : "legs"}</p>
       <ol class="visits">
         ${visits.map(renderVisit).join("")}
@@ -399,7 +416,7 @@ function renderVisit(entry) {
 function renderThrow(index) {
   const remaining = match.scores[index];
   const dartsLeft = 3 - match.darts.length;
-  const suggestion = suggestCheckout(remaining, match.checkout, dartsLeft);
+  const suggestion = suggestCheckout(remaining, match.checkout, dartsLeft, Boolean(match.visitAllowSingle));
   const offer = shouldOfferWriteIn(match);
   const sum = match.darts.reduce((total, dart) => total + dart.score, 0);
   return `
@@ -416,7 +433,7 @@ function renderThrow(index) {
             : `<div class="slot is-empty">${slot + 1}</div>`;
         }).join("")}
       </div>
-      <p class="hint">${suggestion ? `Förslag <strong>${esc(suggestion.map((dart) => dart.label).join(" · "))}</strong>` : remaining <= 180 ? "Ingen utgång på pilarna som är kvar." : ""}</p>
+      <p class="hint">${match.loa && match.visitAllowSingle ? `<span class="loa-flag">LoA · enkel utgång den här rundan</span><br>` : ""}${match.loa && match.visitStar ? `<span class="loa-flag">Stjärna säkrad</span><br>` : ""}${suggestion ? `Förslag <strong>${esc(suggestion.map((dart) => dart.label).join(" · "))}</strong>` : remaining <= 180 ? "Ingen utgång på pilarna som är kvar." : ""}</p>
       <div class="mult" role="group" aria-label="Multiplikator">
         ${[["Enkel", 1], ["Dubbel", 2], ["Trippel", 3]].map(([label, mult]) => `
           <button type="button" class="${ui.mult === mult ? "is-on" : ""}" data-action="mult" data-mult="${mult}" aria-pressed="${ui.mult === mult}">${label}</button>`).join("")}
@@ -483,6 +500,7 @@ function renderManual() {
     scored: ui.manual.score,
     darts: ui.manual.darts,
     finish: ui.manual.finish,
+    allowSingle: Boolean(match.visitAllowSingle),
   });
   const exact = ui.manual.score !== "" && Number(ui.manual.score) === match.visitStart && match.checkout !== "none";
   const canSave = ["ok", "bust", "checkout"].includes(described.status);
@@ -507,7 +525,7 @@ function renderManual() {
               ${[["single", "Enkel"], ["double", "Dubbel"], ["triple", "Trippel"]].map(([id, text]) => `
                 <button type="button" class="choice${ui.manual.finish === id ? " is-on" : ""}" data-action="finish" data-finish="${id}">${text}</button>`).join("")}
             </div>
-            <p class="help">${match.checkout === "double" ? "Bull räknas som dubbel. 25 räknas som enkel." : "Bara en trippel går ut."}</p>
+            <p class="help">${match.visitAllowSingle ? "Enkel går också ut den här rundan. " : ""}${match.checkout === "double" ? "Bull räknas som dubbel. 25 räknas som enkel." : "Bara en trippel går ut."}</p>
           </div>` : ""}
         <div class="numpad">
           ${["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "⌫"].map((key) => `
@@ -551,7 +569,7 @@ function renderRules() {
         <p>En runda är högst tre pilar. Poängen dras från det som är kvar.</p>
         <p><strong>Dubbel.</strong> Sista pilen måste vara dubbel eller bull. Lämnar man 1 är det tjock direkt.</p>
         <p><strong>Trippel.</strong> Sista pilen måste vara trippel.</p>
-        <p><strong>Inget krav.</strong> Exakt noll räcker, oavsett pil.</p>
+        <p><strong>LoA.</strong> Får rundan en utgång — redan från start eller först efter en pil — ger det en stjärna. Högst en per runda. Stjärnan sitter kvar om rundan blir tjock. Två stjärnor ger enkel utgång nästa runda och används då.</p>
         <p>Tjock — för högt, kvar på 1, eller utgång med fel krav — stryker hela rundan. Poängen går tillbaka till rundans start och turen går vidare.</p>
         <p>När en tjock är möjlig redan innan rundan kan ni skriva in poängen. Skriv exakt det som är kvar och ange sista pilen. Stämmer den inte med kravet blir rundan tjock.</p>
         <button type="button" class="btn" data-action="open-stats">Tillbaka</button>
@@ -564,7 +582,7 @@ function renderFlash() {
   const name = playerName(ui.flash.player);
   return `
     <div class="flash" data-action="dismiss-flash">
-      <div class="stamp">TJOCK<small>${esc(name)}. ${esc(bustDetail(ui.flash.reason, match.checkout))}</small></div>
+      <div class="stamp">TJOCK<small>${esc(name)}. ${esc(bustDetail(ui.flash.reason, match.checkout, ui.flash.allowSingle))}</small></div>
     </div>`;
 }
 
@@ -609,6 +627,7 @@ function startMatch() {
     names,
     startScore,
     checkout: setup.checkout,
+    loa: setup.loa,
     legsToWin: setup.legs,
     starter: Math.min(setup.starter, setup.count - 1),
     legStart: setup.legStart,
@@ -709,6 +728,11 @@ function onClick(event) {
   }
   if (action === "checkout") {
     ui.setup.checkout = button.dataset.value;
+    render();
+    return;
+  }
+  if (action === "loa") {
+    ui.setup.loa = !ui.setup.loa;
     render();
     return;
   }

@@ -7,7 +7,7 @@ Räkna dartmatcher i telefonen. Välj spelare, startpoäng och hur man måste g�
 - Varje runda är upp till tre pilar. Poängen räknas ner från startpoängen.
 - **Dubbel:** sista pilen måste vara dubbel eller bull. Att lämna 1 är tjock.
 - **Trippel:** sista pilen måste vara trippel.
-- **Inget krav:** vilken pil som helst får gå ut, så länge det blir exakt.
+- **LoA**, valfritt till dubbel eller trippel: en stjärna när rundan har en utgång, även om den uppstår mitt i rundan. Två stjärnor ger enkel utgång nästa runda. Stjärnan sitter kvar vid tjock.
 - Går man över, lämnar 1 på dubbel, eller går ut med fel krav stryks hela rundan.
 - Innan rundan, när en tjock fortfarande är möjlig, kan poängen skrivas in i stället för att klicka pil för pil. Fel utgång blir tjock.
 - Nästa leg startas varannan spelare, eller av den som gick ut, beroende på vad ni valde.

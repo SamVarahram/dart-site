@@ -9,11 +9,6 @@ export const CHECKOUTS = [
     label: "Trippel",
     hint: "Sista pilen måste vara trippel.",
   },
-  {
-    id: "none",
-    label: "Inget krav",
-    hint: "Vilken pil som helst får gå ut, så länge det blir exakt.",
-  },
 ];
 
 export const SCORE_PRESETS = [101, 301, 501, 701];
@@ -75,8 +70,9 @@ export function isPossibleScore(score, darts) {
   return REACHABLE[darts].has(score);
 }
 
-export function isValidFinish(dart, checkout) {
+export function isValidFinish(dart, checkout, allowSingle = false) {
   if (!dart || dart.score <= 0) return false;
+  if (allowSingle && dart.mult === 1) return true;
   if (checkout === "none") return true;
   if (checkout === "double") {
     return dart.mult === 2 && (dart.sector === 25 || (dart.sector >= 1 && dart.sector <= 20));
@@ -97,14 +93,16 @@ export function shouldOfferWriteIn(state) {
     && canBustThisVisit(state.visitStart, state.checkout);
 }
 
-export function createMatch({ names, startScore, checkout, legsToWin = null, starter = 0, legStart = "alternate" }) {
+export function createMatch({ names, startScore, checkout, legsToWin = null, starter = 0, legStart = "alternate", loa = false }) {
   if (!Array.isArray(names) || names.length < 1 || names.length > 8) {
     throw new Error("Antal spelare måste vara 1–8.");
   }
   if (!Number.isInteger(startScore) || startScore < 2 || startScore > 1001) {
     throw new Error("Startpoäng måste vara 2–1001.");
   }
-  if (!CHECKOUTS.some((item) => item.id === checkout)) throw new Error("Ogiltig utgång.");
+  if (checkout !== "double" && checkout !== "triple" && checkout !== "none") {
+    throw new Error("Ogiltig utgång.");
+  }
   if (legsToWin != null && (!Number.isInteger(legsToWin) || legsToWin < 1 || legsToWin > 15)) {
     throw new Error("Ogiltigt legantal.");
   }
@@ -114,15 +112,17 @@ export function createMatch({ names, startScore, checkout, legsToWin = null, sta
     darts: 0,
     points: 0,
     best: 0,
+    stars: 0,
   }));
   const starterIndex = ((starter % players.length) + players.length) % players.length;
-  return {
+  return beginTurn({
     id: `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
     createdAt: Date.now(),
     startScore,
     checkout,
     legsToWin,
     legStart: legStart === "winner" ? "winner" : "alternate",
+    loa: Boolean(loa) && checkout !== "none",
     players,
     starterIndex,
     legNumber: 1,
@@ -130,12 +130,14 @@ export function createMatch({ names, startScore, checkout, legsToWin = null, sta
     turnIndex: 0,
     visitStart: startScore,
     darts: [],
+    visitAllowSingle: false,
+    visitStar: false,
     log: [],
     phase: "play",
     legWinner: null,
     matchWinner: null,
     tie: false,
-  };
+  }, 0);
 }
 
 export function currentPlayerIndex(state) {
@@ -168,8 +170,10 @@ export function checkoutLabel(checkout) {
   return CHECKOUTS.find((item) => item.id === checkout)?.label ?? checkout;
 }
 
-export function bustDetail(reason, checkout) {
+export function bustDetail(reason, checkout, allowSingle = false) {
   if (reason === "finish") {
+    if (allowSingle && checkout === "double") return "Fel krav — den här rundan går enkel, dubbel eller bull.";
+    if (allowSingle && checkout === "triple") return "Fel krav — den här rundan går enkel eller trippel.";
     if (checkout === "double") return "Fel krav — måste gå ut på dubbel eller bull.";
     if (checkout === "triple") return "Fel krav — måste gå ut på trippel.";
     return "Fel krav.";
@@ -185,10 +189,11 @@ export function applyDart(state, dart) {
   const remaining = state.scores[player];
   const next = remaining - dart.score;
   const darts = [...state.darts, dart];
+  const allowSingle = Boolean(state.visitAllowSingle);
 
   if (next < 0) return bust(state, player, darts, "over");
-  if (next === 0 && !isValidFinish(dart, state.checkout)) return bust(state, player, darts, "finish");
-  if (state.checkout === "double" && next === 1) return bust(state, player, darts, "stuck");
+  if (next === 0 && !isValidFinish(dart, state.checkout, allowSingle)) return bust(state, player, darts, "finish");
+  if (state.checkout === "double" && next === 1 && !allowSingle) return bust(state, player, darts, "stuck");
 
   const scores = state.scores.slice();
   scores[player] = next;
@@ -218,7 +223,8 @@ export function applyDart(state, dart) {
       event: { type: "score", player },
     };
   }
-  return { state: { ...state, scores, darts }, event: { type: "dart", player } };
+  const open = { ...state, scores, darts };
+  return { state: markStar(open, next, 3 - darts.length), event: { type: "dart", player } };
 }
 
 export function endVisit(state) {
@@ -238,7 +244,7 @@ export function endVisit(state) {
   };
 }
 
-export function describeManual({ remaining, checkout, scored, darts, finish }) {
+export function describeManual({ remaining, checkout, scored, darts, finish, allowSingle = false }) {
   if (scored === "" || scored == null) return { status: "empty", message: "Skriv in poängen." };
   const value = Number(scored);
   if (!Number.isInteger(value) || value < 0 || value > 180) {
@@ -251,7 +257,7 @@ export function describeManual({ remaining, checkout, scored, darts, finish }) {
     return { status: "bust", reason: "over", message: "Tjock — för högt. Poängen står kvar." };
   }
   const left = remaining - value;
-  if (checkout === "double" && left === 1) {
+  if (checkout === "double" && left === 1 && !allowSingle) {
     return { status: "bust", reason: "stuck", message: "Tjock — 1 går inte att lämna." };
   }
   if (left === 0) {
@@ -260,8 +266,10 @@ export function describeManual({ remaining, checkout, scored, darts, finish }) {
     if (!canFinishWith(value, darts, finish)) {
       return { status: "invalid", message: "Den poängen kan inte sluta så." };
     }
-    if (!finishSatisfies(finish, checkout)) {
-      const need = checkout === "double" ? "dubbel eller bull" : "trippel";
+    if (!finishSatisfies(finish, checkout, allowSingle)) {
+      const need = allowSingle
+        ? (checkout === "double" ? "enkel, dubbel eller bull" : "enkel eller trippel")
+        : (checkout === "double" ? "dubbel eller bull" : "trippel");
       return { status: "bust", reason: "finish", message: `Tjock — fel krav. Måste gå ut på ${need}.` };
     }
     return { status: "checkout", message: "Ut!" };
@@ -278,12 +286,17 @@ export function applyManual(state, input) {
     scored: input.scored,
     darts: input.darts,
     finish: input.finish,
+    allowSingle: Boolean(state.visitAllowSingle),
   });
   if (described.status === "invalid" || described.status === "empty" || described.status === "need-finish") {
     return { state, error: described.message };
   }
-  const player = currentPlayerIndex(state);
   const scored = Number(input.scored);
+  const noted = described.status === "ok"
+    ? markStar(state, state.visitStart - scored, 3 - input.darts)
+    : state;
+  const player = currentPlayerIndex(noted);
+  state = noted;
   const suffix = input.finish ? ` · ${finishName(input.finish)}` : "";
   const labels = [`${scored}${suffix}`];
   if (described.status === "bust") {
@@ -296,7 +309,7 @@ export function applyManual(state, input) {
         left: state.visitStart,
         result: "bust",
       }),
-      event: { type: "bust", reason: described.reason, player },
+      event: { type: "bust", reason: described.reason, player, allowSingle: Boolean(state.visitAllowSingle) },
     };
   }
   if (described.status === "checkout") {
@@ -349,17 +362,13 @@ export function startNextLeg(state) {
     ? state.legWinner
     : (state.starterIndex + 1) % state.players.length;
   return {
-    state: {
+    state: beginTurn({
       ...state,
       starterIndex,
       legNumber: state.legNumber + 1,
       scores: state.players.map(() => state.startScore),
-      turnIndex: 0,
-      darts: [],
-      visitStart: state.startScore,
-      phase: "play",
       legWinner: null,
-    },
+    }, 0),
     event: { type: "leg" },
   };
 }
@@ -379,12 +388,16 @@ export function endMatch(state) {
   };
 }
 
-export function suggestCheckout(remaining, checkout, maxDarts = 3) {
-  const key = `${checkout}:${remaining}:${maxDarts}`;
+export function suggestCheckout(remaining, checkout, maxDarts = 3, allowSingle = false) {
+  const key = `${checkout}:${remaining}:${maxDarts}:${allowSingle ? 1 : 0}`;
   if (suggestionCache.has(key)) return suggestionCache.get(key)?.map((dart) => ({ ...dart })) ?? null;
-  const path = findCheckout(remaining, checkout, maxDarts);
+  const path = findCheckout(remaining, checkout, maxDarts, allowSingle);
   suggestionCache.set(key, path);
   return path?.map((dart) => ({ ...dart })) ?? null;
+}
+
+export function canCheckout(remaining, checkout, dartsLeft, allowSingle = false) {
+  return dartsLeft > 0 && suggestCheckout(remaining, checkout, dartsLeft, allowSingle) != null;
 }
 
 function bust(state, player, darts, reason) {
@@ -397,7 +410,7 @@ function bust(state, player, darts, reason) {
       left: state.visitStart,
       result: "bust",
     }),
-    event: { type: "bust", reason, player },
+    event: { type: "bust", reason, player, allowSingle: Boolean(state.visitAllowSingle) },
   };
 }
 
@@ -405,6 +418,7 @@ function commitVisit(state, visit) {
   const scores = state.scores.slice();
   scores[visit.player] = visit.left;
   const counted = visit.result === "bust" ? 0 : visit.total;
+  const earned = earnedStar(state, visit);
   const players = state.players.map((player, index) => {
     if (index !== visit.player) return player;
     return {
@@ -413,6 +427,7 @@ function commitVisit(state, visit) {
       points: player.points + counted,
       best: Math.max(player.best, counted),
       visits: (player.visits || 0) + 1,
+      stars: nextStars(player.stars || 0, state, earned),
     };
   });
   const log = [...state.log, {
@@ -422,6 +437,7 @@ function commitVisit(state, visit) {
     total: visit.result === "bust" ? 0 : visit.total,
     result: visit.result,
     darts: visit.darts,
+    star: Boolean(state.loa && earned),
   }];
   if (visit.result === "checkout") {
     const withLegs = players.map((player, index) => (
@@ -441,17 +457,44 @@ function commitVisit(state, visit) {
     };
   }
   const turnIndex = (state.turnIndex + 1) % state.players.length;
-  const nextPlayer = (state.starterIndex + turnIndex) % state.players.length;
-  return {
+  return beginTurn({ ...state, players, scores, log }, turnIndex);
+}
+
+function nextStars(stars, state, earned) {
+  let next = stars;
+  if (state.visitAllowSingle) next = Math.max(0, next - 2);
+  if (state.loa && earned) next = Math.min(2, next + 1);
+  return next;
+}
+
+function earnedStar(state, visit) {
+  if (!state.loa) return false;
+  if (state.visitStar || visit.result === "checkout") return true;
+  const dartsLeft = 3 - visit.darts;
+  return visit.result === "score"
+    && dartsLeft > 0
+    && canCheckout(visit.left, state.checkout, dartsLeft, state.visitAllowSingle);
+}
+
+function beginTurn(state, turnIndex) {
+  const player = (state.starterIndex + turnIndex) % state.players.length;
+  const visitStart = state.scores[player];
+  const allow = Boolean(state.loa) && (state.players[player].stars || 0) >= 2;
+  return markStar({
     ...state,
-    players,
-    scores,
-    darts: [],
-    log,
     turnIndex,
-    visitStart: scores[nextPlayer],
+    darts: [],
+    visitStart,
+    visitAllowSingle: allow,
+    visitStar: false,
     phase: "play",
-  };
+  }, visitStart, 3);
+}
+
+function markStar(state, remaining, dartsLeft) {
+  if (!state.loa || state.visitStar || dartsLeft < 1) return state;
+  if (!canCheckout(remaining, state.checkout, dartsLeft, state.visitAllowSingle)) return state;
+  return { ...state, visitStar: true };
 }
 
 function finishName(finish) {
@@ -461,7 +504,8 @@ function finishName(finish) {
   return "";
 }
 
-function finishSatisfies(finish, checkout) {
+function finishSatisfies(finish, checkout, allowSingle = false) {
+  if (allowSingle && finish === "single") return true;
   if (checkout === "double") return finish === "double";
   if (checkout === "triple") return finish === "triple";
   return true;
@@ -488,13 +532,14 @@ function finishScores(finish) {
   return [];
 }
 
-function rankFinish(dart, checkout) {
-  if (checkout === "double") {
-    if (!isValidFinish(dart, "double")) return -1;
+function rankFinish(dart, checkout, allowSingle = false) {
+  if (checkout === "double" && isValidFinish(dart, "double")) {
     return FINISH_RANK.double.get(dart.score) ?? 40 + (dart.sector === 25 ? 10 : dart.sector);
   }
-  if (checkout === "triple") return isValidFinish(dart, "triple") ? 50 + dart.sector : -1;
-  return dart.score + (dart.mult === 1 ? 0.2 : 0);
+  if (checkout === "triple" && isValidFinish(dart, "triple")) return 50 + dart.sector;
+  if (checkout === "none") return dart.score + (dart.mult === 1 ? 0.2 : 0);
+  if (allowSingle && dart.mult === 1 && dart.score > 0) return 12;
+  return -1;
 }
 
 function rankSetup(dart) {
@@ -519,13 +564,27 @@ for (const checkout of Object.keys(bestFinish)) {
   }
 }
 
-function findCheckout(remaining, checkout, maxDarts) {
+const bestSingle = new Map();
+for (const dart of DARTS) {
+  if (dart.mult !== 1 || dart.score <= 0) continue;
+  const previous = bestSingle.get(dart.score);
+  if (!previous || dart.sector > previous.sector) bestSingle.set(dart.score, dart);
+}
+
+function finishLookup(score, checkout, allowSingle) {
+  const normal = bestFinish[checkout]?.get(score)?.dart ?? null;
+  if (!allowSingle) return normal;
+  return normal ?? bestSingle.get(score) ?? null;
+}
+
+function findCheckout(remaining, checkout, maxDarts, allowSingle = false) {
   if (!Number.isInteger(remaining) || remaining <= 0 || remaining > 180) return null;
   let best = null;
   let bestScore = -Infinity;
+  const skipStuck = checkout === "double" && !allowSingle;
   const consider = (path) => {
     const last = path[path.length - 1];
-    const finishRank = rankFinish(last, checkout);
+    const finishRank = rankFinish(last, checkout, allowSingle);
     if (finishRank < 0) return;
     let score = (4 - path.length) * 10000 + finishRank * 40;
     for (let index = 0; index < path.length - 1; index += 1) score += rankSetup(path[index]);
@@ -535,17 +594,17 @@ function findCheckout(remaining, checkout, maxDarts) {
   };
 
   if (maxDarts >= 1) {
-    const finish = bestFinish[checkout].get(remaining);
-    if (finish) consider([finish.dart]);
+    const finish = finishLookup(remaining, checkout, allowSingle);
+    if (finish) consider([finish]);
     if (best) return best;
   }
   if (maxDarts >= 2) {
     for (const first of DARTS) {
       const left = remaining - first.score;
       if (first.score <= 0 || left <= 0) continue;
-      if (checkout === "double" && left === 1) continue;
-      const finish = bestFinish[checkout].get(left);
-      if (finish) consider([first, finish.dart]);
+      if (skipStuck && left === 1) continue;
+      const finish = finishLookup(left, checkout, allowSingle);
+      if (finish) consider([first, finish]);
     }
     if (best) return best;
   }
@@ -553,13 +612,13 @@ function findCheckout(remaining, checkout, maxDarts) {
     for (const first of DARTS) {
       const left = remaining - first.score;
       if (first.score <= 0 || left <= 0) continue;
-      if (checkout === "double" && left === 1) continue;
+      if (skipStuck && left === 1) continue;
       for (const second of DARTS) {
         const rest = left - second.score;
         if (second.score <= 0 || rest <= 0) continue;
-        if (checkout === "double" && rest === 1) continue;
-        const finish = bestFinish[checkout].get(rest);
-        if (finish) consider([first, second, finish.dart]);
+        if (skipStuck && rest === 1) continue;
+        const finish = finishLookup(rest, checkout, allowSingle);
+        if (finish) consider([first, second, finish]);
       }
     }
   }

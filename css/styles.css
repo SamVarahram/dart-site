@@ -244,6 +244,11 @@ button:focus-visible, input:focus-visible {
 
 .avg { margin: 0; color: var(--chalk-dim); font-size: 13px; }
 
+.stars { margin: 0 0 2px; letter-spacing: 0.12em; color: rgba(244, 236, 212, 0.28); font-size: 18px; }
+.stars .is-on { color: var(--gold); }
+.loa-flag { color: var(--gold); }
+.col .loa-flag { margin: 0 0 4px; font-size: 12px; line-height: 1.2; }
+
 .visits {
   list-style: none;
   margin: 10px 0 0;
