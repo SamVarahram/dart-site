@@ -250,3 +250,75 @@ test("omöjliga tresiffriga rundor saknas", () => {
   assert.equal(isPossibleScore(100, 1), false);
   assert.equal(isPossibleScore(0, 3), true);
 });
+
+test("LoA ger en stjärna per runda och behåller den vid tjock", () => {
+  let state = match({ startScore: 40, loa: true, legsToWin: 5 });
+  assert.equal(state.visitStar, true);
+  state = applyDart(state, createDart(20, 1)).state;
+  assert.equal(state.scores[0], 20);
+  assert.equal(state.visitStar, true);
+  const busted = applyDart(state, createDart(20, 3));
+  assert.equal(busted.event.reason, "over");
+  assert.equal(busted.state.scores[0], 40);
+  assert.equal(busted.state.players[0].stars, 1);
+
+  state = match({ startScore: 40, loa: true });
+  state = applyDart(state, createDart(1, 1)).state;
+  state = applyDart(state, createDart(1, 1)).state;
+  state = applyDart(state, createDart(1, 1)).state;
+  assert.equal(state.players[0].stars, 1);
+  assert.equal(state.scores[0], 37);
+
+  state = match({ startScore: 501, loa: true });
+  state = applyDart(state, createDart(20, 3)).state;
+  state = applyDart(state, createDart(20, 3)).state;
+  state = applyDart(state, createDart(20, 3)).state;
+  assert.equal(state.players[0].stars, 0);
+  assert.equal(state.visitStar, false);
+});
+
+test("två stjärnor ger enkel utgång nästa runda", () => {
+  let state = match({ startScore: 20, loa: true, legsToWin: 5 });
+  const bust = (current) => applyDart(current, createDart(20, 1)).state;
+  state = bust(state);
+  state = bust(state);
+  state = bust(state);
+  assert.equal(state.players[0].stars, 2);
+  state = bust(state);
+  assert.equal(currentPlayerIndex(state), 0);
+  assert.equal(state.visitAllowSingle, true);
+  assert.equal(state.players[0].stars, 2);
+  const out = applyDart(state, createDart(20, 1));
+  assert.equal(out.event.type, "checkout");
+  assert.equal(out.state.players[0].stars, 1);
+  assert.equal(out.state.players[0].legs, 1);
+
+  const stillDouble = applyDart(match({ startScore: 20, loa: true }), createDart(20, 1));
+  assert.equal(stillDouble.event.reason, "finish");
+
+  state = match({ startScore: 20, loa: true, legsToWin: 5 });
+  const bustAgain = (current) => applyDart(current, createDart(20, 1)).state;
+  state = bustAgain(state);
+  state = bustAgain(state);
+  state = bustAgain(state);
+  state = bustAgain(state);
+  state = applyDart(state, createDart(19, 1)).state;
+  assert.equal(state.scores[0], 1);
+  const one = applyDart(state, createDart(1, 1));
+  assert.equal(one.event.type, "checkout");
+});
+
+test("LoA på trippel släpper igenom enkel först när stjärnorna räcker", () => {
+  let state = match({ startScore: 21, checkout: "triple", loa: true, legsToWin: 5 });
+  const bust = (current) => applyDart(current, createDart(20, 3)).state;
+  state = bust(state);
+  assert.equal(state.scores[0], 21);
+  assert.equal(state.players[0].stars, 1);
+  state = bust(state);
+  state = bust(state);
+  state = bust(state);
+  assert.equal(state.visitAllowSingle, true);
+  state = applyDart(state, createDart(1, 1)).state;
+  const out = applyDart(state, createDart(20, 1));
+  assert.equal(out.event.type, "checkout");
+});
