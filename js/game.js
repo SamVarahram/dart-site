@@ -224,7 +224,7 @@ export function applyDart(state, dart) {
     };
   }
   const open = { ...state, scores, darts };
-  return { state: markStar(open, next, 3 - darts.length), event: { type: "dart", player } };
+  return { state: markStar(open, next), event: { type: "dart", player } };
 }
 
 export function endVisit(state) {
@@ -292,11 +292,7 @@ export function applyManual(state, input) {
     return { state, error: described.message };
   }
   const scored = Number(input.scored);
-  const noted = described.status === "ok"
-    ? markStar(state, state.visitStart - scored, 3 - input.darts)
-    : state;
-  const player = currentPlayerIndex(noted);
-  state = noted;
+  const player = currentPlayerIndex(state);
   const suffix = input.finish ? ` · ${finishName(input.finish)}` : "";
   const labels = [`${scored}${suffix}`];
   if (described.status === "bust") {
@@ -469,11 +465,7 @@ function nextStars(stars, state, earned) {
 
 function earnedStar(state, visit) {
   if (!state.loa) return false;
-  if (state.visitStar || visit.result === "checkout") return true;
-  const dartsLeft = 3 - visit.darts;
-  return visit.result === "score"
-    && dartsLeft > 0
-    && canCheckout(visit.left, state.checkout, dartsLeft, state.visitAllowSingle);
+  return Boolean(state.visitStar) || visit.result === "checkout";
 }
 
 function beginTurn(state, turnIndex) {
@@ -488,12 +480,12 @@ function beginTurn(state, turnIndex) {
     visitAllowSingle: allow,
     visitStar: false,
     phase: "play",
-  }, visitStart, 3);
+  }, visitStart);
 }
 
-function markStar(state, remaining, dartsLeft) {
-  if (!state.loa || state.visitStar || dartsLeft < 1) return state;
-  if (!canCheckout(remaining, state.checkout, dartsLeft, state.visitAllowSingle)) return state;
+function markStar(state, remaining) {
+  if (!state.loa || state.visitStar) return state;
+  if (!finishLookup(remaining, state.checkout, Boolean(state.visitAllowSingle))) return state;
   return { ...state, visitStar: true };
 }
 
