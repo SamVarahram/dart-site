@@ -363,6 +363,7 @@ export function startNextLeg(state) {
       starterIndex,
       legNumber: state.legNumber + 1,
       scores: state.players.map(() => state.startScore),
+      players: state.players.map((player) => ({ ...player, stars: 0 })),
       legWinner: null,
     }, 0),
     event: { type: "leg" },
@@ -423,7 +424,7 @@ function commitVisit(state, visit) {
       points: player.points + counted,
       best: Math.max(player.best, counted),
       visits: (player.visits || 0) + 1,
-      stars: nextStars(player.stars || 0, state, earned),
+      stars: nextStars(player.stars || 0, earned),
     };
   });
   const log = [...state.log, {
@@ -456,11 +457,9 @@ function commitVisit(state, visit) {
   return beginTurn({ ...state, players, scores, log }, turnIndex);
 }
 
-function nextStars(stars, state, earned) {
-  let next = stars;
-  if (state.visitAllowSingle) next = Math.max(0, next - 2);
-  if (state.loa && earned) next = Math.min(2, next + 1);
-  return next;
+function nextStars(stars, earned) {
+  if (!earned) return stars;
+  return Math.min(2, stars + 1);
 }
 
 function earnedStar(state, visit) {
