@@ -312,9 +312,14 @@ test("LoA ger en stjärna per runda och behåller den vid tjock", () => {
   assert.equal(state.visitStar, false);
 });
 
-test("två stjärnor ger enkel utgång nästa runda", () => {
+test("två stjärnor ger enkel utgång resten av legget", () => {
   let state = match({ startScore: 20, loa: true, legsToWin: 5 });
   const bust = (current) => applyDart(current, createDart(20, 1)).state;
+  const threeSingles = (current) => {
+    let next = applyDart(current, createDart(1, 1)).state;
+    next = applyDart(next, createDart(1, 1)).state;
+    return applyDart(next, createDart(1, 1)).state;
+  };
   state = bust(state);
   state = bust(state);
   state = bust(state);
@@ -323,10 +328,24 @@ test("två stjärnor ger enkel utgång nästa runda", () => {
   assert.equal(currentPlayerIndex(state), 0);
   assert.equal(state.visitAllowSingle, true);
   assert.equal(state.players[0].stars, 2);
-  const out = applyDart(state, createDart(20, 1));
+
+  state = threeSingles(state);
+  assert.equal(state.players[0].stars, 2);
+  assert.equal(state.scores[0], 17);
+  state = threeSingles(state);
+  assert.equal(currentPlayerIndex(state), 0);
+  assert.equal(state.visitAllowSingle, true);
+  assert.equal(state.players[0].stars, 2);
+  const out = applyDart(state, createDart(17, 1));
   assert.equal(out.event.type, "checkout");
-  assert.equal(out.state.players[0].stars, 1);
+  assert.equal(out.state.players[0].stars, 2);
   assert.equal(out.state.players[0].legs, 1);
+
+  const nextLeg = startNextLeg(out.state).state;
+  assert.equal(nextLeg.players[0].stars, 0);
+  assert.equal(nextLeg.players[1].stars, 0);
+  assert.equal(nextLeg.visitAllowSingle, false);
+  assert.equal(applyDart(nextLeg, createDart(20, 1)).event.reason, "finish");
 
   const stillDouble = applyDart(match({ startScore: 20, loa: true }), createDart(20, 1));
   assert.equal(stillDouble.event.reason, "finish");
@@ -341,6 +360,7 @@ test("två stjärnor ger enkel utgång nästa runda", () => {
   assert.equal(state.scores[0], 1);
   const one = applyDart(state, createDart(1, 1));
   assert.equal(one.event.type, "checkout");
+  assert.equal(one.state.players[0].stars, 2);
 });
 
 test("LoA på trippel släpper igenom enkel först när stjärnorna räcker", () => {

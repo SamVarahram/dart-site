@@ -17,7 +17,7 @@ import {
   shouldOfferWriteIn,
   startNextLeg,
   suggestCheckout,
-} from "./game.js?v=5";
+} from "./game.js?v=6";
 
 const KEY = "tavlan.v1";
 
@@ -333,7 +333,7 @@ function renderSetup() {
               <strong>${item.label}</strong><br><span class="meta">${item.hint}</span>
             </button>`).join("")}
           <button type="button" class="choice${setup.loa ? " is-on" : ""}" data-action="loa" aria-pressed="${setup.loa ? "true" : "false"}">
-            <strong>LoA</strong><br><span class="meta">En stjärna när en pil i rundan själv kan gå ut. Hamnar sista pilen på en utgång väntar stjärnan till nästa runda. Två stjärnor ger enkel utgång nästa runda. Stjärnan sitter kvar vid tjock.</span>
+            <strong>LoA</strong><br><span class="meta">En stjärna när en pil i rundan själv kan gå ut. Hamnar sista pilen på en utgång väntar stjärnan till nästa runda. Två stjärnor ger enkel utgång resten av legget, från nästa runda. Stjärnan sitter kvar vid tjock.</span>
           </button>
         </div>
       </div>
@@ -379,7 +379,7 @@ function renderBoard() {
 
 function loaNote(playerIndex, current) {
   if (!match.loa || playerIndex !== current || match.phase !== "play") return "";
-  if (match.visitAllowSingle) return `<p class="loa-flag">Enkel ut den här rundan</p>`;
+  if (match.visitAllowSingle) return `<p class="loa-flag">Enkel ut resten av legget</p>`;
   if (match.visitStar) return `<p class="loa-flag">Stjärna säkrad</p>`;
   return "";
 }
@@ -433,7 +433,7 @@ function renderThrow(index) {
             : `<div class="slot is-empty">${slot + 1}</div>`;
         }).join("")}
       </div>
-      <p class="hint">${match.loa && match.visitAllowSingle ? `<span class="loa-flag">LoA · enkel utgång den här rundan</span><br>` : ""}${match.loa && match.visitStar ? `<span class="loa-flag">Stjärna säkrad</span><br>` : ""}${suggestion ? `Förslag <strong>${esc(suggestion.map((dart) => dart.label).join(" · "))}</strong>` : remaining <= 180 ? "Ingen utgång på pilarna som är kvar." : ""}</p>
+      <p class="hint">${match.loa && match.visitAllowSingle ? `<span class="loa-flag">LoA · enkel utgång resten av legget</span><br>` : ""}${match.loa && match.visitStar ? `<span class="loa-flag">Stjärna säkrad</span><br>` : ""}${suggestion ? `Förslag <strong>${esc(suggestion.map((dart) => dart.label).join(" · "))}</strong>` : remaining <= 180 ? "Ingen utgång på pilarna som är kvar." : ""}</p>
       <div class="mult" role="group" aria-label="Multiplikator">
         ${[["Enkel", 1], ["Dubbel", 2], ["Trippel", 3]].map(([label, mult]) => `
           <button type="button" class="${ui.mult === mult ? "is-on" : ""}" data-action="mult" data-mult="${mult}" aria-pressed="${ui.mult === mult}">${label}</button>`).join("")}
@@ -525,7 +525,7 @@ function renderManual() {
               ${[["single", "Enkel"], ["double", "Dubbel"], ["triple", "Trippel"]].map(([id, text]) => `
                 <button type="button" class="choice${ui.manual.finish === id ? " is-on" : ""}" data-action="finish" data-finish="${id}">${text}</button>`).join("")}
             </div>
-            <p class="help">${match.visitAllowSingle ? "Enkel går också ut den här rundan. " : ""}${match.checkout === "double" ? "Bull räknas som dubbel. 25 räknas som enkel." : "Bara en trippel går ut."}</p>
+            <p class="help">${match.visitAllowSingle ? "Enkel går också ut resten av legget. " : ""}${match.checkout === "double" ? "Bull räknas som dubbel. 25 räknas som enkel." : "Bara en trippel går ut."}</p>
           </div>` : ""}
         <div class="numpad">
           ${["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "⌫"].map((key) => `
@@ -569,7 +569,7 @@ function renderRules() {
         <p>En runda är högst tre pilar. Poängen dras från det som är kvar.</p>
         <p><strong>Dubbel.</strong> Sista pilen måste vara dubbel eller bull. Lämnar man 1 är det tjock direkt.</p>
         <p><strong>Trippel.</strong> Sista pilen måste vara trippel.</p>
-        <p><strong>LoA.</strong> En stjärna när en pil börjar på en poäng den pilen kan gå ut på. Högst en per runda. Lämnar sista pilen en utgång kommer stjärnan nästa runda. Stjärnan sitter kvar vid tjock. Två stjärnor ger enkel utgång nästa runda och används då.</p>
+        <p><strong>LoA.</strong> En stjärna när en pil börjar på en poäng den pilen kan gå ut på. Högst en per runda. Lämnar sista pilen en utgång kommer stjärnan nästa runda. Stjärnan sitter kvar vid tjock. Två stjärnor ger enkel utgång resten av legget, från och med nästa runda.</p>
         <p>Tjock — för högt, kvar på 1, eller utgång med fel krav — stryker hela rundan. Poängen går tillbaka till rundans start och turen går vidare.</p>
         <p>När en tjock är möjlig redan innan rundan kan ni skriva in poängen. Skriv exakt det som är kvar och ange sista pilen. Stämmer den inte med kravet blir rundan tjock.</p>
         <button type="button" class="btn" data-action="open-stats">Tillbaka</button>
